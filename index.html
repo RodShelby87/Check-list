@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Checklist with Backup</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --success: #10b981;
+            --bg: #f1f5f9;
+            --card: #ffffff;
+            --text: #1e293b;
+            --danger: #ef4444;
+            --sidebar-bg: #1e293b;
+        }
+
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; height: 100vh; margin: 0; }
+
+        /* Sidebar */
+        #sidebar { width: 280px; background: var(--sidebar-bg); color: white; padding: 20px; display: flex; flex-direction: column; }
+        #sidebar h3 { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 10px 0; }
+        #list-tabs { flex: 1; overflow-y: auto; }
+
+        .list-tab {
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: 0.2s;
+            background: #334155;
+        }
+
+        .list-tab:hover { background: #475569; }
+        .list-tab.active { background: var(--primary); }
+        .list-tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 10px; }
+
+        .controls { display: flex; gap: 4px; }
+        .controls button {
+            background: rgba(255,255,255,0.1);
+            border: none; color: white; cursor: pointer;
+            padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;
+        }
+
+        /* Backup Buttons */
+        .backup-zone { border-top: 1px solid #334155; padding-top: 15px; display: flex; flex-direction: column; gap: 8px; }
+        .btn-secondary { background: #475569; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+        .btn-secondary:hover { background: #64748b; }
+        #new-list-btn { background: var(--success); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
+
+        /* Main Area */
+        .main-content { flex: 1; padding: 40px; display: flex; justify-content: center; overflow-y: auto; }
+        .container { background: var(--card); width: 100%; max-width: 500px; padding: 2rem; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); height: fit-content; }
+        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        #counter { font-weight: bold; padding: 4px 12px; border-radius: 20px; background: #eef2ff; color: var(--primary); }
+        #counter.completed { background: #ecfdf5; color: var(--success); }
+
+        .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] { flex: 1; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; outline: none; }
+        #add-btn { background: var(--primary); color: white; border: none; padding: 0 20px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+
+        ul { list-style: none; padding: 0; }
+        li { display: flex; align-items: center; padding: 12px; border-bottom: 1px solid #f1f5f9; }
+        input[type="checkbox"] { width: 18px; height: 18px; margin-right: 12px; cursor: pointer; accent-color: var(--primary); }
+        .item-text { flex: 1; }
+        input[type="checkbox"]:checked + .item-text { text-decoration: line-through; color: #94a3b8; }
+        .item-del { color: var(--danger); background: none; border: none; cursor: pointer; font-size: 0.8rem; opacity: 0.3; }
+        li:hover .item-del { opacity: 1; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <button id="new-list-btn">+ New List</button>
+    
+    <h3>My Lists</h3>
+    <div id="list-tabs"></div>
+
+    <h3>Backup & Restore</h3>
+    <div class="backup-zone">
+        <button class="btn-secondary" onclick="exportData()">💾 Export Lists to File</button>
+        <button class="btn-secondary" onclick="document.getElementById('importFile').click()">📂 Import from File</button>
+        <input type="file" id="importFile" style="display:none" accept=".json" onchange="importData(event)">
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="container">
+        <div class="header-row">
+            <h2 id="current-list-title" style="margin:0">List</h2>
+            <div id="counter">0</div>
+        </div>
+        <div class="input-group">
+            <input type="text" id="todo-input" placeholder="Add something...">
+            <button id="add-btn">Add</button>
+        </div>
+        <ul id="todo-list"></ul>
+    </div>
+</div>
+
+<script>
+    let data = JSON.parse(localStorage.getItem('smartChecklist')) || [{ name: "Default List", items: [] }];
+    let activeIndex = 0;
+
+    const listTabsUI = document.getElementById('list-tabs');
+    const todoListUI = document.getElementById('todo-list');
+    const titleUI = document.getElementById('current-list-title');
+    const inputUI = document.getElementById('todo-input');
+
+    function save() {
+        localStorage.setItem('smartChecklist', JSON.stringify(data));
+        render();
+    }
+
+    function render() {
+        listTabsUI.innerHTML = '';
+        data.forEach((list, idx) => {
+            const div = document.createElement('div');
+            div.className = `list-tab ${idx === activeIndex ? 'active' : ''}`;
+            div.innerHTML = `
+                <span class="list-tab-title" title="Dbl-click to rename" ondblclick="renameList(${idx})">${list.name}</span>
+                <div class="controls">
+                    <button onclick="move(${idx}, -1); event.stopPropagation()">↑</button>
+                    <button onclick="move(${idx}, 1); event.stopPropagation()">↓</button>
+                    <button onclick="deleteList(${idx}); event.stopPropagation()">✕</button>
+                </div>
+            `;
+            div.onclick = () => { activeIndex = idx; render(); };
+            listTabsUI.appendChild(div);
+        });
+
+        const current = data[activeIndex] || data[0];
+        titleUI.textContent = current.name;
+        todoListUI.innerHTML = '';
+        current.items.forEach((item, itemIdx) => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <input type="checkbox" ${item.checked ? 'checked' : ''}>
+                <span class="item-text">${item.text}</span>
+                <button class="item-del" onclick="deleteItem(${itemIdx})">Remove</button>
+            `;
+            li.querySelector('input').onchange = (e) => {
+                current.items[itemIdx].checked = e.target.checked;
+                save();
+            };
+            todoListUI.appendChild(li);
+        });
+        updateCounter();
+    }
+
+    // --- Data Functions ---
+    function move(index, direction) {
+        const newIdx = index + direction;
+        if (newIdx < 0 || newIdx >= data.length) return;
+        [data[index], data[newIdx]] = [data[newIdx], data[index]];
+        activeIndex = (activeIndex === index) ? newIdx : (activeIndex === newIdx ? index : activeIndex);
+        save();
+    }
+
+    function renameList(index) {
+        const newName = prompt("Rename list to:", data[index].name);
+        if (newName) { data[index].name = newName; save(); }
+    }
+
+    function deleteList(index) {
+        if (data.length <= 1) return;
+        if (confirm(`Delete "${data[index].name}"?`)) {
+            data.splice(index, 1);
+            activeIndex = 0;
+            save();
+        }
+    }
+
+    function deleteItem(itemIdx) {
+        data[activeIndex].items.splice(itemIdx, 1);
+        save();
+    }
+
+    function updateCounter() {
+        const counter = document.getElementById('counter');
+        const items = data[activeIndex].items;
+        const unchecked = items.filter(i => !i.checked).length;
+        if (items.length > 0 && unchecked > 0) {
+            counter.textContent = `To do: ${unchecked}`;
+            counter.classList.remove('completed');
+        } else {
+            counter.textContent = "Completed";
+            counter.classList.add('completed');
+        }
+    }
+
+    // --- Export & Import ---
+    function exportData() {
+        const jsonString = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonString], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `my-checklists-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+    }
+
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (Array.isArray(importedData)) {
+                    data = importedData;
+                    activeIndex = 0;
+                    save();
+                    alert("Import Successful!");
+                }
+            } catch (err) {
+                alert("Invalid file format.");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // --- Listeners ---
+    document.getElementById('new-list-btn').onclick = () => {
+        const name = prompt("List name:");
+        if (name) { data.push({ name: name, items: [] }); activeIndex = data.length - 1; save(); }
+    };
+    document.getElementById('add-btn').onclick = () => {
+        const val = inputUI.value.trim();
+        if (val) { data[activeIndex].items.push({ text: val, checked: false }); inputUI.value = ''; save(); }
+    };
+    inputUI.onkeypress = (e) => { if(e.key === 'Enter') document.getElementById('add-btn').click(); };
+
+    render();
+</script>
+
+</body>
+</html>
