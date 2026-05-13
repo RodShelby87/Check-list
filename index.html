@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Checklist with Backup</title>
+    <title>Pro Checklist with Item Editing</title>
     <style>
         :root {
             --primary: #6366f1;
@@ -65,7 +65,7 @@
         ul { list-style: none; padding: 0; }
         li { display: flex; align-items: center; padding: 12px; border-bottom: 1px solid #f1f5f9; }
         input[type="checkbox"] { width: 18px; height: 18px; margin-right: 12px; cursor: pointer; accent-color: var(--primary); }
-        .item-text { flex: 1; }
+        .item-text { flex: 1; cursor: pointer; }
         input[type="checkbox"]:checked + .item-text { text-decoration: line-through; color: #94a3b8; }
         .item-del { color: var(--danger); background: none; border: none; cursor: pointer; font-size: 0.8rem; opacity: 0.3; }
         li:hover .item-del { opacity: 1; }
@@ -139,7 +139,7 @@
             const li = document.createElement('li');
             li.innerHTML = `
                 <input type="checkbox" ${item.checked ? 'checked' : ''}>
-                <span class="item-text">${item.text}</span>
+                <span class="item-text" title="Double-click to edit" ondblclick="editItem(${itemIdx})">${item.text}</span>
                 <button class="item-del" onclick="deleteItem(${itemIdx})">Remove</button>
             `;
             li.querySelector('input').onchange = (e) => {
@@ -165,6 +165,16 @@
         if (newName) { data[index].name = newName; save(); }
     }
 
+    // NEW FUNCTION: Edit individual task items
+    function editItem(itemIdx) {
+        const currentItem = data[activeIndex].items[itemIdx];
+        const newText = prompt("Edit item:", currentItem.text);
+        if (newText !== null && newText.trim() !== "") {
+            data[activeIndex].items[itemIdx].text = newText.trim();
+            save();
+        }
+    }
+
     function deleteList(index) {
         if (data.length <= 1) return;
         if (confirm(`Delete "${data[index].name}"?`)) {
@@ -181,7 +191,7 @@
 
     function updateCounter() {
         const counter = document.getElementById('counter');
-        const items = data[activeIndex].items;
+        const items = data[activeIndex] ? data[activeIndex].items : [];
         const unchecked = items.filter(i => !i.checked).length;
         if (items.length > 0 && unchecked > 0) {
             counter.textContent = `To do: ${unchecked}`;
